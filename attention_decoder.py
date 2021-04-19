@@ -16,8 +16,8 @@
 
 """This file defines the decoder"""
 
-import tensorflow as tf
-from tensorflow.python.ops import variable_scope
+import tensorflow.compat.v1 as tf
+from tensorflow.compat.v1 import variable_scope
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import math_ops
@@ -48,7 +48,7 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
     p_gens: List of length input_size, containing tensors of shape [batch_size, 1]. The values of p_gen for each decoder step. Empty list if pointer_gen=False.
     coverage: Coverage vector on the last step computed. None if use_coverage=False.
   """
-  with variable_scope.variable_scope("attention_decoder") as scope:
+  with variable_scope("attention_decoder") as scope:
     batch_size = encoder_states.get_shape()[0].value # if this line fails, it's because the batch size isn't defined
     attn_size = encoder_states.get_shape()[2].value # if this line fails, it's because the attention length isn't defined
 
@@ -63,14 +63,14 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
     attention_vec_size = attn_size
 
     # Get the weight matrix W_h and apply it to each encoder state to get (W_h h_i), the encoder features
-    W_h = variable_scope.get_variable("W_h", [1, 1, attn_size, attention_vec_size])
+    W_h = tf.get_variable("W_h", [1, 1, attn_size, attention_vec_size])
     encoder_features = nn_ops.conv2d(encoder_states, W_h, [1, 1, 1, 1], "SAME") # shape (batch_size,attn_length,1,attention_vec_size)
 
     # Get the weight vectors v and w_c (w_c is for coverage)
-    v = variable_scope.get_variable("v", [attention_vec_size])
+    v = tf.get_variable("v", [attention_vec_size])
     if use_coverage:
       with variable_scope.variable_scope("coverage"):
-        w_c = variable_scope.get_variable("w_c", [1, 1, 1, attention_vec_size])
+        w_c = tf.get_variable("w_c", [1, 1, 1, attention_vec_size])
 
     if prev_coverage is not None: # for beam search mode with coverage
       # reshape from (batch_size, attn_length) to (batch_size, attn_len, 1, 1)
@@ -88,7 +88,7 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
         attn_dist: attention distribution
         coverage: new coverage vector. shape (batch_size, attn_len, 1, 1)
       """
-      with variable_scope.variable_scope("Attention"):
+      with variable_scope("Attention"):
         # Pass the decoder state through a linear layer (this is W_s s_t + b_attn in the paper)
         decoder_features = linear(decoder_state, attention_vec_size, True) # shape (batch_size, attention_vec_size)
         decoder_features = tf.expand_dims(tf.expand_dims(decoder_features, 1), 1) # reshape to (batch_size, 1, 1, attention_vec_size)
@@ -139,9 +139,9 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
       # Re-calculate the context vector from the previous step so that we can pass it through a linear layer with this step's input to get a modified version of the input
       context_vector, _, coverage = attention(initial_state, coverage) # in decode mode, this is what updates the coverage vector
     for i, inp in enumerate(decoder_inputs):
-      tf.logging.info("Adding attention_decoder timestep %i of %i", i, len(decoder_inputs))
+      tf.compat.v1.logging.info("Adding attention_decoder timestep %i of %i", i, len(decoder_inputs))
       if i > 0:
-        variable_scope.get_variable_scope().reuse_variables()
+        tf.get_variable_scope().reuse_variables()
 
       # Merge input and previous attentions into one vector x of the same size as inp
       input_size = inp.get_shape().with_rank(2)[1]
@@ -154,7 +154,7 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
 
       # Run the attention mechanism.
       if i == 0 and initial_state_attention:  # always true in decode mode
-        with variable_scope.variable_scope(variable_scope.get_variable_scope(), reuse=True): # you need this because you've already run the initial attention(...) call
+        with variable_scope(tf.get_variable_scope(), reuse=True): # you need this because you've already run the initial attention(...) call
           context_vector, attn_dist, _ = attention(state, coverage) # don't allow coverage to update
       else:
         context_vector, attn_dist, coverage = attention(state, coverage)
@@ -169,7 +169,7 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
 
       # Concatenate the cell_output (= decoder state) and the context vector, and pass them through a linear layer
       # This is V[s_t, h*_t] + b in the paper
-      with variable_scope.variable_scope("AttnOutputProjection"):
+      with variable_scope("AttnOutputProjection"):
         output = linear([cell_output] + [context_vector], cell.output_size, True)
       outputs.append(output)
 
